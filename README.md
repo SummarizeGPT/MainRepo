@@ -6,6 +6,8 @@ are not sent anywhere. No credentials or billable upstream services are used.
 
 ## Local development
 
+Use Node.js 24.x.
+
 ```sh
 npm ci
 npm run lint
