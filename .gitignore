@@ -23,5 +23,7 @@ dist-ssr
 *.sln
 *.sw?
 
-# env 
-.env
+# Cloudflare and local environment files
+.cloudflare/
+.dev.vars*
+.env*
