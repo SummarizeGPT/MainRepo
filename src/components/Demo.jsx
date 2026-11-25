@@ -1,8 +1,11 @@
-import React from 'react'
 import { useState, useEffect } from 'react';
 
-import{copy, linkIcon, loader, tick} from '../assets';
-import { useLazyGetSummaryQuery } from '../services/article';
+import { copy, linkIcon, loader, tick } from '../assets';
+import {
+  sampleArticleUrl,
+  unsupportedArticleMessage,
+  useLazyGetSummaryQuery,
+} from '../services/article';
 
 
 const Demo = () => {
@@ -13,9 +16,10 @@ const Demo = () => {
 
   const [allArticles, setAllArticles] = useState([])
 
-  const [copied, useCopied] = useState("");
+  const [copied, setCopied] = useState('');
 
-  const [getSummary, {error, isFetching}] = useLazyGetSummaryQuery();
+  const [error, setError] = useState(null);
+  const [getSummary, { isFetching }] = useLazyGetSummaryQuery();
 
   useEffect(() => {
     const articlesFromLocalStorage = JSON.parse(localStorage.getItem(`articles`))
@@ -29,10 +33,13 @@ const Demo = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    const {data} = await getSummary({ articleUrl: article.url});
-    if (data?.summary){
-      const newArticle = { ...article, summary: data.summary };
-      const updatedAllArticles = [newArticle, ...allArticles];
+    const url = article.url.trim();
+    setError(null);
+    const { data, error: summaryError } = await getSummary(url);
+    setError(summaryError ?? null);
+    if (data?.summary) {
+      const newArticle = { url, summary: data.summary };
+      const updatedAllArticles = [newArticle, ...allArticles.filter((item) => item.url !== url)];
 
       setArticle(newArticle);
       setAllArticles(updatedAllArticles);
@@ -41,45 +48,60 @@ const Demo = () => {
     }
   }
 
-  const handleCopy = (copyUrl) => {
+  const handleCopy = async (copyUrl) => {
+    await navigator.clipboard.writeText(copyUrl);
     setCopied(copyUrl);
-    navigator.clipboard.writeText(copyUrl);
-    setTimeout(() => setCopied(false), 3000);
-  }
+    setTimeout(() => setCopied(''), 3000);
+  };
+
+  const chooseArticle = (nextArticle) => {
+    setError(null);
+    setArticle(nextArticle);
+  };
 
   return (
     <section className='mt-16 w-full max-w-xl'>
       {/* Search */}
       <div className='flex flex-col w-full gap-2'>
-        <form className='relative flex justify-center items-center' 
-        onSubmit={handleSubmit}>
-        <img src={linkIcon} alt="link_icon" className='absolute left-0 my-2 ml-3 w-5'/>
-        
-        <input type="url" placeholder='Enter a URL' value={article.url} onChange={(e) => setArticle({article, url: e.target.value})} required className='url_input peer'/>
-        
-        <button type='submit' className="submit_btn peer-focus:border-gray-700 peer-focus:text-gray-700">
-          ↵
-        </button>
+        <p className='font-satoshi text-sm text-gray-700'>
+          Preview only: {unsupportedArticleMessage}{' '}
+          <button
+            type='button'
+            className='text-blue-700 underline'
+            disabled={isFetching}
+            onClick={() => chooseArticle({ url: sampleArticleUrl, summary: '' })}
+          >
+            Use example URL
+          </button>
+        </p>
+        <form className='relative flex justify-center items-center' onSubmit={handleSubmit}>
+          <img src={linkIcon} alt='' className='absolute left-0 my-2 ml-3 w-5'/>
+          <input type='url' aria-label='Article URL' placeholder='Enter a URL'
+            value={article.url} disabled={isFetching}
+            onChange={(e) => chooseArticle({ url: e.target.value, summary: '' })}
+            required className='url_input peer'/>
+          <button type='submit' aria-label='Summarize' disabled={isFetching}
+            className='submit_btn peer-focus:border-gray-700 peer-focus:text-gray-700'>
+            ↵
+          </button>
         </form>
 
           {/* Browse URL History */}
             <div className='flex flex-col gap-1 max-h-60 overflow-y-auto'>
-          {allArticles.reverse().map((item, index) => (
-            <div
-              key={`link-${index}`}
-              onClick={() => setArticle(item)}
-              className='link_card'
-            >
-              <div className='copy_btn' onClick={() => handleCopy(item.url)}>
+          {allArticles.map((item, index) => (
+            <div key={`link-${index}`} className='link_card'>
+              <button type='button' className='copy_btn' aria-label='Copy article URL'
+                onClick={() => handleCopy(item.url)}>
                 <img
                   src={copied === item.url ? tick : copy}
-                  alt={copied === item.url ? "tick_icon" : "copy_icon"}
+                  alt=''
                   className='w-[40%] h-[40%] object-contain'
                 />
-              </div>
-              <p className='flex-1 font-satoshi text-blue-700 font-medium text-sm truncate'>
+              </button>
+              <button type='button' disabled={isFetching} onClick={() => chooseArticle(item)}
+                className='flex-1 text-left font-satoshi text-blue-700 font-medium text-sm truncate'>
                 {item.url}
-              </p>
+              </button>
             </div>
           ))}
         </div>
@@ -90,12 +112,8 @@ const Demo = () => {
         {isFetching ? (
           <img src={loader} alt='loader' className='w-20 h-20 object-contain' />
         ) : error ? (
-          <p className='font-inter font-bold text-black text-center'>
-            Well, that wasn't supposed to happen...
-            <br />
-            <span className='font-satoshi font-normal text-gray-700'>
-              {error?.data?.error}
-            </span>
+          <p role='alert' className='text-center text-gray-700'>
+            {error.status === 'CUSTOM_ERROR' ? error.error : 'Could not load the example summary.'}
           </p>
         ) : (
           article.summary && (
